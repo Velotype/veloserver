@@ -33,7 +33,7 @@ export class App {
         const server = Deno.serve({
             port: port,
             hostname: hostname,
-            handler: this.#router.processRequest,
+            handler: this.#router.requestHandler,
             signal: abortController.signal,
             onListen: async ({ port, hostname }) => {
                 console.log(`Server started at http://${hostname}:${port} on host: ${Deno.hostname()} with deno version: ${Deno.version.deno}`)

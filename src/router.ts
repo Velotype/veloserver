@@ -235,7 +235,7 @@ export class Router {
     /**
      * Process a Request, passed to Deno.serve() by the wrapped App
      */
-    processRequest = async (request: Request): Promise<Response> => {
+    requestHandler = async (request: Request): Promise<Response> => {
         const context: Context = new Context(request)
         try {
             let nextRouteNode: RouteNode | undefined
