@@ -1,0 +1,20 @@
+{
+  "name": "@velotype/veloserver",
+  "license": "MIT",
+  "version": "0.0.1",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "publish": {
+    "exclude": [
+      "docs/",
+      "tests/"
+    ]
+  },
+  "tasks": {
+    "test": "deno test ./tests/"
+  },
+  "compilerOptions": {
+    "lib": ["dom", "deno.ns", "esnext"]
+  }
+}
