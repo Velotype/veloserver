@@ -3,7 +3,6 @@ import {contentType} from "jsr:@std/media-types@^1.0/content-type"
 import {eTag} from "jsr:@std/http@^1.0/etag"
 
 import {Context} from "./context.ts"
-import {Mode} from "./mode.ts"
 
 /**
  * RequestInspectors return this object
@@ -309,30 +308,13 @@ export class Router {
     /**
      * Mount a directory of files to a given path (mounts the files on HTTP GET)
      * 
-     * This will reread the files from disk on every request
-     */
-    mountFiles(mountDir: string, targetDir: string): void {
-        console.log(`Mounting target dir: ${targetDir} to mount: ${mountDir}`)
-        for (const dirEntry of Deno.readDirSync(targetDir)) {
-            if (dirEntry.isFile) {
-                this.get(mountDir + dirEntry.name, this.#serveFile(targetDir + dirEntry.name))
-            } else if (dirEntry.isDirectory) {
-                this.mountFiles(mountDir + dirEntry.name + "/", targetDir + dirEntry.name + "/")
-            } else if (dirEntry.isSymlink) {
-                console.log(`ERROR Attempted to mount a symlink, this is not supported name: ${dirEntry.name}`)
-            }
-        }
-    }
-    /**
-     * Mount a directory of files to a given path (mounts the files on HTTP GET)
-     * 
      * This will preload the files into memory and serve from memory on each request
      */
-    async mountMemoizedFiles(mountDir: string, targetDir: string): Promise<void> {
+    async mountFiles(mountDir: string, targetDir: string, memoized: boolean = true): Promise<void> {
         console.log(`Mounting memoized target dir: ${targetDir} to mount: ${mountDir}`)
         for (const dirEntry of Deno.readDirSync(targetDir)) {
             if (dirEntry.isFile) {
-                if (Mode.isLocal) {
+                if (memoized) {
                     console.log(`Serving file directly: ${targetDir + dirEntry.name}`)
                     this.get(mountDir + dirEntry.name, this.#serveFile(targetDir + dirEntry.name))
                 } else {
@@ -340,7 +322,7 @@ export class Router {
                     this.get(mountDir + dirEntry.name, await this.#serveMemoizedFile(targetDir + dirEntry.name))
                 }
             } else if (dirEntry.isDirectory) {
-                this.mountMemoizedFiles(mountDir + dirEntry.name + "/", targetDir + dirEntry.name + "/")
+                this.mountFiles(mountDir + dirEntry.name + "/", targetDir + dirEntry.name + "/", memoized)
             } else if (dirEntry.isSymlink) {
                 console.log(`ERROR Attempted to mount a symlink, this is not supported name: ${dirEntry.name}`)
             }
