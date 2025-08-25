@@ -1,4 +1,3 @@
-import {Mode} from "./mode.ts"
 import {Context} from "./context.ts"
 import {
     RequestInspectorResponse,
@@ -14,7 +13,6 @@ import type {
 } from "./router.ts"
 
 export {
-    Mode,
     App,
     Context,
     RequestInspectorResponse,

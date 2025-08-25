@@ -1,4 +1,3 @@
-import {Mode} from "./mode.ts"
 import type {Router} from "./router.ts"
 
 /** Used to represent a generic Callback function */
@@ -37,7 +36,7 @@ export class App {
             handler: this.#router.processRequest,
             signal: abortController.signal,
             onListen: async ({ port, hostname }) => {
-                console.log(`Server started at http://${hostname}:${port} on host: ${Deno.hostname()} with run mode: ${Mode.runMode} deno version: ${Deno.version.deno}`)
+                console.log(`Server started at http://${hostname}:${port} on host: ${Deno.hostname()} with deno version: ${Deno.version.deno}`)
                 for (const callback of this.#server_listen_callbacks) {
                     try {
                         await callback()
