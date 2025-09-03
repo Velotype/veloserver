@@ -10,6 +10,7 @@ export class App {
     #router: Router
     #server_listen_callbacks: Callback[] = []
     #server_finished_callbacks: Callback[] = []
+    #abortController?: AbortController
     /**
      * Construct a new App to serve all routes contained in the given router
      */
@@ -27,14 +28,21 @@ export class App {
         this.#server_finished_callbacks.push(callback)
     }
 
+    /** Programmatically trigger the App to close */
+    close(reason?: string) {
+        console.log(`Close triggered due to: ${reason} - Starting shutdown`)
+        this.#abortController?.abort(`Closing due to: ${reason}`)
+        this.#abortController = undefined
+    }
+
     /** Call Deno.serve() on the given hostname and port */
     serve(hostname: string, port: number) {
-        const abortController = new AbortController()
+        this.#abortController = new AbortController()
         const server = Deno.serve({
             port: port,
             hostname: hostname,
             handler: this.#router.requestHandler,
-            signal: abortController.signal,
+            signal: this.#abortController.signal,
             onListen: async ({ port, hostname }) => {
                 console.log(`Server started at http://${hostname}:${port} on host: ${Deno.hostname()} with deno version: ${Deno.version.deno}`)
                 for (const callback of this.#server_listen_callbacks) {
@@ -60,12 +68,11 @@ export class App {
         })
         const signals: Deno.Signal[] = ["SIGINT", "SIGTERM", "SIGUSR1"]
         signals.forEach(signal => {
-            Deno.addSignalListener(signal,
-                function() {
-                    console.log(`Received ${signal} signal - Starting shutdown`)
-                    abortController.abort(`Received ${signal}`)
-                }
-            )
+            Deno.addSignalListener(signal, () => {
+                console.log(`Received ${signal} signal - Starting shutdown`)
+                this.#abortController?.abort(`Received ${signal}`)
+                this.#abortController = undefined
+            })
         })
     }
 }
