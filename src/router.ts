@@ -39,10 +39,13 @@ export class Inspector {
     requestInspector?: RequestInspector
     /** A Response Inspector (if set) */
     responseInspector?: ResponseInspector
+    /** If this Inspector should inspect child paths (default true) */
+    observeChildPaths: boolean
     /** Create a new Inspector pair */
-    constructor(requestInspector?: RequestInspector | undefined, responseInspector?: ResponseInspector) {
+    constructor(requestInspector?: RequestInspector | undefined, responseInspector?: ResponseInspector, observeChildPaths?: boolean) {
         this.requestInspector = requestInspector
         this.responseInspector = responseInspector
+        this.observeChildPaths = (observeChildPaths != undefined) ? observeChildPaths : true
     }
 }
 
@@ -104,7 +107,7 @@ class RouteNode {
         } else if (pathSegment.length > 1 && pathSegment.charAt(0) == ":") {
             const pathVariable = pathSegment.substring(1)
             if (this.childNodes.length > 1) {
-                console.log(`ERROR Route validation error, RouteNode with pathVariable child has more than one child, childNodes.length: ${this.childNodes.length}`)
+                console.log(`ERROR Route validation error, RouteNode with pathVariable child has more than one child, childNodes.length: ${this.childNodes.length} pathSegment: ${this.pathSegment}`)
             }
             const child = this.childNodes.find(node => node.isWildcard)
             if (child) {
@@ -201,35 +204,54 @@ export class Router {
         return response
     }
 
+    #addPathHandlerToNode(routeNode: RouteNode, paths: string | string[], handler: Handler) {
+        if (Array.isArray(paths)) {
+            paths.forEach(path => {
+                routeNode.addPathHandler(pathSegmentsFromPath(path), handler)
+            })
+        } else {
+            routeNode.addPathHandler(pathSegmentsFromPath(paths), handler)
+        }
+    }
+    #addPathInspectorToNode(routeNode: RouteNode, paths: string | string[], inspector: Inspector) {
+        if (Array.isArray(paths)) {
+            paths.forEach(path => {
+                routeNode.addPathInspector(pathSegmentsFromPath(path), inspector)
+            })
+        } else {
+            routeNode.addPathInspector(pathSegmentsFromPath(paths), inspector)
+        }
+    }
+
     /** Add a Handler for an HTTP GET path */
-    get(path: string, handler: Handler): void {
-        this.#get_routes.addPathHandler(pathSegmentsFromPath(path), handler)
+    get(paths: string | string[], handler: Handler): void {
+        this.#addPathHandlerToNode(this.#get_routes, paths, handler)
     }
     /** Add a Handler for an HTTP HEAD path */
-    head(path: string, handler: Handler): void {
-        this.#head_routes.addPathHandler(pathSegmentsFromPath(path), handler)
+    head(paths: string | string[], handler: Handler): void {
+        this.#addPathHandlerToNode(this.#head_routes, paths, handler)
     }
     /** Add a Handler for an HTTP POST path */
-    post(path: string, handler: Handler): void {
-        this.#post_routes.addPathHandler(pathSegmentsFromPath(path), handler)
+    post(paths: string | string[], handler: Handler): void {
+        this.#addPathHandlerToNode(this.#post_routes, paths, handler)
     }
     /** Add an Inspector for an HTTP GET path */
-    addGetInspector(path: string, inspector: Inspector): void {
-        this.#get_routes.addPathInspector(pathSegmentsFromPath(path), inspector)
+    addGetInspector(paths: string | string[], inspector: Inspector): void {
+        this.#addPathInspectorToNode(this.#get_routes, paths, inspector)
     }
     /** Add an Inspector for an HTTP HEAD path */
-    addHeadInspector(path: string, inspector: Inspector): void {
-        this.#head_routes.addPathInspector(pathSegmentsFromPath(path), inspector)
+    addHeadInspector(paths: string | string[], inspector: Inspector): void {
+        this.#addPathInspectorToNode(this.#head_routes, paths, inspector)
     }
     /** Add an Inspector for an HTTP POST path */
-    addPostInspector(path: string, inspector: Inspector): void {
-        this.#post_routes.addPathInspector(pathSegmentsFromPath(path), inspector)
+    addPostInspector(paths: string | string[], inspector: Inspector): void {
+        this.#addPathInspectorToNode(this.#post_routes, paths, inspector)
     }
     /** Add an Inspector for a HTTP GET, HEAD, and POST path */
-    addAllInspector(path: string, inspector: Inspector): void {
-        this.addGetInspector(path,inspector)
-        this.addHeadInspector(path,inspector)
-        this.addPostInspector(path,inspector)
+    addAllInspector(paths: string | string[], inspector: Inspector): void {
+        this.addGetInspector(paths,inspector)
+        this.addHeadInspector(paths,inspector)
+        this.addPostInspector(paths,inspector)
     }
 
     /**
@@ -258,7 +280,7 @@ export class Router {
             while(nextRouteNode) {
                 // Process inspectors for this node
                 for(const inspector of nextRouteNode.inspectors) {
-                    if (inspector.requestInspector) {
+                    if (inspector.requestInspector && (pathParts.length == 0 || inspector.observeChildPaths)) {
                         let requestInspectorResponse = inspector.requestInspector(request, context)
                         if (requestInspectorResponse instanceof Promise) {
                             requestInspectorResponse = await requestInspectorResponse
@@ -270,7 +292,7 @@ export class Router {
                             return processResponseInspectors(responseInspectors, request, this.#server_error_handler(request,context), context)
                         }
                     }
-                    if (inspector.responseInspector) {
+                    if (inspector.responseInspector && (pathParts.length == 0 || inspector.observeChildPaths)) {
                         responseInspectors.push(inspector.responseInspector)
                     }
                 }
@@ -309,6 +331,8 @@ export class Router {
      * Mount a directory of files to a given path (mounts the files on HTTP GET)
      * 
      * This will preload the files into memory and serve from memory on each request
+     * 
+     * @param memoized - if the file should be read only once and held in-memory (true by default)
      */
     async mountFiles(mountDir: string, targetDir: string, memoized: boolean = true): Promise<void> {
         console.log(`Mounting memoized target dir: ${targetDir} to mount: ${mountDir}`)

@@ -69,6 +69,29 @@ Deno.test("request inspector on sub path", async () => {
     assertEquals(inspectorTriggered, true)
 })
 
+Deno.test("request inspector on sub path, observeChildPaths false", async () => {
+    const router: Router = new Router()
+    router.get(["/sub", "/sub/path"], function() {
+        const response = new Response("",{status:200})
+        return response
+    })
+    let inspectorTriggered = false
+    router.addGetInspector("/sub",new Inspector((_request: Request, _context: Context) => {
+        inspectorTriggered = true
+        return new RequestInspectorResponse(true)
+    }, undefined, false))
+
+    let req = new Request("http://localhost/sub/path")
+    let res = await router.requestHandler(req)
+    assertEquals(res.status, 200)
+    assertEquals(inspectorTriggered, false)
+
+    req = new Request("http://localhost/sub")
+    res = await router.requestHandler(req)
+    assertEquals(res.status, 200)
+    assertEquals(inspectorTriggered, true)
+})
+
 Deno.test("global request inspector", async () => {
     const router: Router = new Router()
     router.get("/sub/path", function() {
