@@ -25,37 +25,37 @@ export class RequestInspectorResponse {
 }
 
 /** A Request Handler that processes a Request with a given Context */
-export type Handler = (request: Request, context: Context) => Response | Promise<Response>
+export type Handler<ContextMetadata = never> = (request: Request, context: Context<ContextMetadata>) => Response | Promise<Response>
 
 /** A Request Inspector */
-export type RequestInspector = (request: Request, context: Context) => RequestInspectorResponse | Promise<RequestInspectorResponse>
+export type RequestInspector<ContextMetadata = never> = (request: Request, context: Context<ContextMetadata>) => RequestInspectorResponse | Promise<RequestInspectorResponse>
 
 /** A Response Inspector */
-export type ResponseInspector = (request: Request, response: Response, context: Context) => void | Promise<void>
+export type ResponseInspector<ContextMetadata = never> = (request: Request, response: Response, context: Context<ContextMetadata>) => void | Promise<void>
 
 /** A pair of Request and Response Inspectors (each optional) */
-export class Inspector {
+export class Inspector<ContextMetadata = never> {
     /** A Request Inspector (if set) */
-    requestInspector?: RequestInspector
+    requestInspector?: RequestInspector<ContextMetadata>
     /** A Response Inspector (if set) */
-    responseInspector?: ResponseInspector
+    responseInspector?: ResponseInspector<ContextMetadata>
     /** If this Inspector should inspect child paths (default true) */
     observeChildPaths: boolean
     /** Create a new Inspector pair */
-    constructor(requestInspector?: RequestInspector | undefined, responseInspector?: ResponseInspector, observeChildPaths?: boolean) {
+    constructor(requestInspector?: RequestInspector<ContextMetadata> | undefined, responseInspector?: ResponseInspector<ContextMetadata>, observeChildPaths?: boolean) {
         this.requestInspector = requestInspector
         this.responseInspector = responseInspector
         this.observeChildPaths = (observeChildPaths != undefined) ? observeChildPaths : true
     }
 }
 
-class RouteNode {
+class RouteNode<ContextMetadata> {
     pathSegment: string = ""
     isWildcard: boolean = false
     pathVariable: string = ""
-    inspectors: Inspector[] = []
-    childNodes: RouteNode[] = []
-    handler: Handler | undefined = undefined
+    inspectors: Inspector<ContextMetadata>[] = []
+    childNodes: RouteNode<ContextMetadata>[] = []
+    handler: Handler<ContextMetadata> | undefined = undefined
     setPathSegment(pathSegment: string): void {
         this.pathSegment = pathSegment
     }
@@ -65,30 +65,30 @@ class RouteNode {
             this.pathVariable = pathVariable
         }
     }
-    addInspector(inspector: Inspector): void {
+    addInspector(inspector: Inspector<ContextMetadata>): void {
         this.inspectors.push(inspector)
     }
-    setHandler(handler: Handler): void {
+    setHandler(handler: Handler<ContextMetadata>): void {
         if (this.handler) {
             console.log("ERROR RouteNode setHandler called twice for the same route",this)
         } else {
             this.handler = handler
         }
     }
-    addChildNode(routeNode: RouteNode): void {
+    addChildNode(routeNode: RouteNode<ContextMetadata>): void {
         this.childNodes.push(routeNode)
     }
-    addPathHandler(pathSegments: string[], handler: Handler): void {
-        this.addPathPropertyHelper(pathSegments, (node: RouteNode) => {
+    addPathHandler(pathSegments: string[], handler: Handler<ContextMetadata>): void {
+        this.addPathPropertyHelper(pathSegments, (node: RouteNode<ContextMetadata>) => {
             node.setHandler(handler)
         })
     }
-    addPathInspector(pathSegments: string[], inspector: Inspector): void {
-        this.addPathPropertyHelper(pathSegments, (node: RouteNode) => {
+    addPathInspector(pathSegments: string[], inspector: Inspector<ContextMetadata>): void {
+        this.addPathPropertyHelper(pathSegments, (node: RouteNode<ContextMetadata>) => {
             node.addInspector(inspector)
         })
     }
-    addPathPropertyHelper(pathSegments: string[], setClosure: (node: RouteNode) => void): void {
+    addPathPropertyHelper(pathSegments: string[], setClosure: (node: RouteNode<ContextMetadata>) => void): void {
         if (pathSegments.length == 0) {
             setClosure(this)
             return
@@ -99,7 +99,7 @@ class RouteNode {
             if (pathSegments.length > 0) {
                 console.log(`ERROR Route validation error, RouteNode with wildcard child has more path segments, pathSegments.length: ${pathSegments.length}`)
             } else {
-                const newChild = new RouteNode()
+                const newChild = new RouteNode<ContextMetadata>()
                 newChild.setIsWildcard(true, "*")
                 setClosure(newChild)
                 this.addChildNode(newChild)
@@ -120,7 +120,7 @@ class RouteNode {
                     child.addPathPropertyHelper(pathSegments, setClosure)
                 }
             } else {
-                const newChild = new RouteNode()
+                const newChild = new RouteNode<ContextMetadata>()
                 newChild.setIsWildcard(true, pathVariable)
                 if (pathSegments.length == 0) {
                     setClosure(newChild)
@@ -138,7 +138,7 @@ class RouteNode {
                     child.addPathPropertyHelper(pathSegments, setClosure)
                 }
             } else {
-                const newChild = new RouteNode()
+                const newChild = new RouteNode<ContextMetadata>()
                 newChild.setPathSegment(pathSegment)
                 if (pathSegments.length == 0) {
                     setClosure(newChild)
@@ -158,17 +158,6 @@ const pathSegmentsFromPath = function(path: string) {
     return pathSegments
 }
 
-const processResponseInspectors = async (responseInspectors: ResponseInspector[], request: Request, response: Response | Promise<Response>, context: Context): Promise<Response> => {
-    const responseObj: Response = (response instanceof Promise) ? await response : response
-    for(const responseInspector of responseInspectors) {
-        const responseInspectorResponse = responseInspector(request, responseObj, context)
-        if (responseInspectorResponse instanceof Promise) {
-            await responseInspectorResponse
-        }
-    }
-    return response
-}
-
 const default_not_found_handler = function() {
     const response = new Response("<!DOCTYPE html><html><body>Not Found</body></html>", {status: 404})
     response.headers.set("content-type", "text/html; charset=utf-8")
@@ -182,17 +171,17 @@ const default_server_error_handler = function() {
  * A Router is an object that handles processing requests and routing them to
  * various handlers and inspectors.
  */
-export class Router {
-    #get_routes: RouteNode = new RouteNode()
-    #head_routes: RouteNode = new RouteNode()
-    #post_routes: RouteNode = new RouteNode()
-    #not_found_handler: Handler
-    #server_error_handler: Handler
+export class Router<ContextMetadata = never> {
+    #get_routes: RouteNode<ContextMetadata> = new RouteNode()
+    #head_routes: RouteNode<ContextMetadata> = new RouteNode()
+    #post_routes: RouteNode<ContextMetadata> = new RouteNode()
+    #not_found_handler: Handler<ContextMetadata>
+    #server_error_handler: Handler<ContextMetadata>
 
     /**
      * Create a new Rounter with optional backup Handlers in case of NotFound and InternalServerError cases
      */
-    constructor(not_found_handler: Handler = default_not_found_handler, server_error_handler: Handler = default_server_error_handler) {
+    constructor(not_found_handler: Handler<ContextMetadata> = default_not_found_handler, server_error_handler: Handler<ContextMetadata> = default_server_error_handler) {
         this.#not_found_handler = not_found_handler
         this.#server_error_handler = server_error_handler
     }
@@ -204,7 +193,18 @@ export class Router {
         return response
     }
 
-    #addPathHandlerToNode(routeNode: RouteNode, paths: string | string[], handler: Handler) {
+    #processResponseInspectors = async (responseInspectors: ResponseInspector<ContextMetadata>[], request: Request, response: Response | Promise<Response>, context: Context<ContextMetadata>): Promise<Response> => {
+        const responseObj: Response = (response instanceof Promise) ? await response : response
+        for(const responseInspector of responseInspectors) {
+            const responseInspectorResponse = responseInspector(request, responseObj, context)
+            if (responseInspectorResponse instanceof Promise) {
+                await responseInspectorResponse
+            }
+        }
+        return response
+    }
+
+    #addPathHandlerToNode(routeNode: RouteNode<ContextMetadata>, paths: string | string[], handler: Handler<ContextMetadata>) {
         if (Array.isArray(paths)) {
             paths.forEach(path => {
                 routeNode.addPathHandler(pathSegmentsFromPath(path), handler)
@@ -213,7 +213,7 @@ export class Router {
             routeNode.addPathHandler(pathSegmentsFromPath(paths), handler)
         }
     }
-    #addPathInspectorToNode(routeNode: RouteNode, paths: string | string[], inspector: Inspector) {
+    #addPathInspectorToNode(routeNode: RouteNode<ContextMetadata>, paths: string | string[], inspector: Inspector<ContextMetadata>) {
         if (Array.isArray(paths)) {
             paths.forEach(path => {
                 routeNode.addPathInspector(pathSegmentsFromPath(path), inspector)
@@ -224,31 +224,31 @@ export class Router {
     }
 
     /** Add a Handler for an HTTP GET path */
-    get(paths: string | string[], handler: Handler): void {
+    get(paths: string | string[], handler: Handler<ContextMetadata>): void {
         this.#addPathHandlerToNode(this.#get_routes, paths, handler)
     }
     /** Add a Handler for an HTTP HEAD path */
-    head(paths: string | string[], handler: Handler): void {
+    head(paths: string | string[], handler: Handler<ContextMetadata>): void {
         this.#addPathHandlerToNode(this.#head_routes, paths, handler)
     }
     /** Add a Handler for an HTTP POST path */
-    post(paths: string | string[], handler: Handler): void {
+    post(paths: string | string[], handler: Handler<ContextMetadata>): void {
         this.#addPathHandlerToNode(this.#post_routes, paths, handler)
     }
     /** Add an Inspector for an HTTP GET path */
-    addGetInspector(paths: string | string[], inspector: Inspector): void {
+    addGetInspector(paths: string | string[], inspector: Inspector<ContextMetadata>): void {
         this.#addPathInspectorToNode(this.#get_routes, paths, inspector)
     }
     /** Add an Inspector for an HTTP HEAD path */
-    addHeadInspector(paths: string | string[], inspector: Inspector): void {
+    addHeadInspector(paths: string | string[], inspector: Inspector<ContextMetadata>): void {
         this.#addPathInspectorToNode(this.#head_routes, paths, inspector)
     }
     /** Add an Inspector for an HTTP POST path */
-    addPostInspector(paths: string | string[], inspector: Inspector): void {
+    addPostInspector(paths: string | string[], inspector: Inspector<ContextMetadata>): void {
         this.#addPathInspectorToNode(this.#post_routes, paths, inspector)
     }
     /** Add an Inspector for a HTTP GET, HEAD, and POST path */
-    addAllInspector(paths: string | string[], inspector: Inspector): void {
+    addAllInspector(paths: string | string[], inspector: Inspector<ContextMetadata>): void {
         this.addGetInspector(paths,inspector)
         this.addHeadInspector(paths,inspector)
         this.addPostInspector(paths,inspector)
@@ -258,9 +258,9 @@ export class Router {
      * Process a Request, passed to Deno.serve() by the wrapped App
      */
     requestHandler = async (request: Request): Promise<Response> => {
-        const context: Context = new Context(request)
+        const context: Context<ContextMetadata> = new Context(request)
         try {
-            let nextRouteNode: RouteNode | undefined
+            let nextRouteNode: RouteNode<ContextMetadata> | undefined
             if (request.method == "GET") {
                 nextRouteNode = this.#get_routes
             } else if (request.method == "HEAD") {
@@ -275,7 +275,7 @@ export class Router {
             }
             const pathParts = context.getPathParts()
             pathParts.shift()
-            const responseInspectors: ResponseInspector[] = []
+            const responseInspectors: ResponseInspector<ContextMetadata>[] = []
             let closestWildcard = undefined
             while(nextRouteNode) {
                 // Process inspectors for this node
@@ -286,10 +286,10 @@ export class Router {
                             requestInspectorResponse = await requestInspectorResponse
                         }
                         if (requestInspectorResponse.response) {
-                            return processResponseInspectors(responseInspectors, request, requestInspectorResponse.response, context)
+                            return this.#processResponseInspectors(responseInspectors, request, requestInspectorResponse.response, context)
                         } else if (!requestInspectorResponse.shouldContinue) {
                             console.log(`ERROR Middleware did not provide a response yet shouldContinue was false request pathname: ${context.url.pathname}`)
-                            return processResponseInspectors(responseInspectors, request, this.#server_error_handler(request,context), context)
+                            return this.#processResponseInspectors(responseInspectors, request, this.#server_error_handler(request,context), context)
                         }
                     }
                     if (inspector.responseInspector && (pathParts.length == 0 || inspector.observeChildPaths)) {
@@ -299,9 +299,9 @@ export class Router {
                 // No more parts, so time to process the route's handler
                 if (pathParts.length == 0) {
                     if (nextRouteNode.handler) {
-                        return processResponseInspectors(responseInspectors, request, nextRouteNode.handler(request,context), context)
+                        return this.#processResponseInspectors(responseInspectors, request, nextRouteNode.handler(request,context), context)
                     }
-                    return processResponseInspectors(responseInspectors, request, this.#not_found_handler(request,context), context)
+                    return this.#processResponseInspectors(responseInspectors, request, this.#not_found_handler(request,context), context)
                 }
                 const pathSegment = pathParts[0]
                 pathParts.shift()
@@ -318,9 +318,9 @@ export class Router {
                 }
             }
             if (closestWildcard && closestWildcard.handler) {
-                return processResponseInspectors(responseInspectors, request, closestWildcard.handler(request,context), context)
+                return this.#processResponseInspectors(responseInspectors, request, closestWildcard.handler(request,context), context)
             }
-            return processResponseInspectors(responseInspectors, request, this.#not_found_handler(request,context), context)
+            return this.#processResponseInspectors(responseInspectors, request, this.#not_found_handler(request,context), context)
         } catch (error) {
             console.log("ERROR", error)
             return this.#server_error_handler(request, context)
@@ -353,9 +353,9 @@ export class Router {
         }
     }
 
-    #serveFile(path: string): Handler {
+    #serveFile(path: string): Handler<ContextMetadata> {
         console.log(`Loaded file path: ${path}`)
-        return async (request: Request, context: Context) => {
+        return async (request: Request, context: Context<ContextMetadata>) => {
             const fileInfo = await Deno.stat(path)
             if (fileInfo.isFile) {
                 const file = await Deno.open(path, readTrue)
@@ -384,7 +384,7 @@ export class Router {
             const etag = await eTag(buf)
             console.log(`Loaded memoized file path: ${path} bytes: ${numberOfBytesRead} etag: ${etag}`)
             if (numberOfBytesRead == fileInfo.size) {
-                return (request: Request, _context: Context) => {
+                return (request: Request, _context: Context<ContextMetadata>) => {
                     const ifNoneMatch = request.headers.get("if-none-match")
                     if (ifNoneMatch && ifNoneMatch == etag) {
                         const response = new Response(null,{status: 304})

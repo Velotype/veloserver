@@ -6,15 +6,15 @@ export type Callback = (()=>void) | (()=>Promise<void>)
 /**
  * The webserver application process
  */
-export class App {
-    #router: Router
+export class App<ContextMetadata = never> {
+    #router: Router<ContextMetadata>
     #server_listen_callbacks: Callback[] = []
     #server_finished_callbacks: Callback[] = []
     #abortController?: AbortController
     /**
      * Construct a new App to serve all routes contained in the given router
      */
-    constructor(router: Router) {
+    constructor(router: Router<ContextMetadata>) {
         this.#router = router
     }
 
