@@ -1,0 +1,9 @@
+{
+  "imports": {
+      "@velotype/veloserver": "../src/index.ts",
+      "@std/assert": "jsr:@std/assert"
+  },
+  "compilerOptions": {
+    "lib": ["dom", "deno.ns", "esnext"]
+  }
+}

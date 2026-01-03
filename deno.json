@@ -11,6 +11,10 @@
       "tests/"
     ]
   },
+  "imports": {
+      "@std/media-types/content-type": "jsr:@std/media-types@^1.0/content-type",
+      "@std/http/etag": "jsr:@std/http@^1.0/etag"
+  },
   "tasks": {
     "test": "deno test ./tests/"
   },

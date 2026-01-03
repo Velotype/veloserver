@@ -1,7 +1,7 @@
-import { assertEquals } from "jsr:@std/assert"
+import { assertEquals } from "@std/assert"
 import { Inspector, Router } from "../src/router.ts"
 import { RequestInspectorResponse } from "@velotype/veloserver"
-import {Context} from "@velotype/veloserver"
+import type {Context} from "@velotype/veloserver"
 
 Deno.test("GET", async () => {
     const router: Router = new Router()
@@ -168,17 +168,21 @@ type CustomContext = {
     uid: string
 }
 Deno.test("custom context", async () => {
-    const router: Router<CustomContext> = new Router<CustomContext>()
+    const router: Router<CustomContext> = new Router<CustomContext>({
+        context_metadata_constructor: function() {
+            return {uid: "invalid"}
+        }
+    })
     let inspectorTriggered = false
     let detectedUid: string | undefined = undefined
     router.get("/", function(_request: Request, context: Context<CustomContext>) {
         const response = new Response("Hello Veloserver!",{status:200})
-        detectedUid = context.meta?.uid
+        detectedUid = context.meta.uid
         return response
     })
     // Mimics an inspector that resolves auth, then setting that on the context
     router.addGetInspector("/",new Inspector((_request: Request, context: Context<CustomContext>) => {
-        context.meta = {uid: "123"}
+        context.meta.uid = "123"
         inspectorTriggered = true
         return new RequestInspectorResponse(true)
     }))

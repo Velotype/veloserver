@@ -1,8 +1,12 @@
-// deno-lint-ignore-file no-explicit-any
-import {contentType} from "jsr:@std/media-types@^1.0/content-type"
-import {eTag} from "jsr:@std/http@^1.0/etag"
+import {contentType} from "@std/media-types/content-type"
+import {eTag} from "@std/http/etag"
 
 import {Context} from "./context.ts"
+
+const status200 = {status: 200}
+const status304 = {status: 304}
+const status404 = {status: 404}
+const status500 = {status: 500}
 
 /**
  * RequestInspectors return this object
@@ -70,7 +74,7 @@ class RouteNode<ContextMetadata> {
     }
     setHandler(handler: Handler<ContextMetadata>): void {
         if (this.handler) {
-            console.log("ERROR RouteNode setHandler called twice for the same route",this)
+            console.log("ERROR RouteNode setHandler called twice for the same route", this)
         } else {
             this.handler = handler
         }
@@ -159,36 +163,47 @@ const pathSegmentsFromPath = function(path: string) {
 }
 
 const default_not_found_handler = function() {
-    const response = new Response("<!DOCTYPE html><html><body>Not Found</body></html>", {status: 404})
+    const response = new Response("<!DOCTYPE html><html><body>Not Found</body></html>", status404)
     response.headers.set("content-type", "text/html; charset=utf-8")
     return response
 }
 const default_server_error_handler = function() {
-    return new Response("Internal Server Error", {status: 500})
+    return new Response("Internal Server Error", status500)
 }
 
 /**
  * A Router is an object that handles processing requests and routing them to
  * various handlers and inspectors.
  */
-export class Router<ContextMetadata = never> {
+export class Router<ContextMetadata> {
     #get_routes: RouteNode<ContextMetadata> = new RouteNode()
     #head_routes: RouteNode<ContextMetadata> = new RouteNode()
     #post_routes: RouteNode<ContextMetadata> = new RouteNode()
+    #context_metadata_constructor: (requet: Request) => ContextMetadata
     #not_found_handler: Handler<ContextMetadata>
     #server_error_handler: Handler<ContextMetadata>
 
     /**
      * Create a new Rounter with optional backup Handlers in case of NotFound and InternalServerError cases
      */
-    constructor(not_found_handler: Handler<ContextMetadata> = default_not_found_handler, server_error_handler: Handler<ContextMetadata> = default_server_error_handler) {
-        this.#not_found_handler = not_found_handler
-        this.#server_error_handler = server_error_handler
+    constructor({
+        not_found_handler,
+        server_error_handler,
+        context_metadata_constructor
+    }: {
+        not_found_handler?: Handler<ContextMetadata>,
+        server_error_handler?: Handler<ContextMetadata>,
+        context_metadata_constructor: (request: Request) => ContextMetadata
+    }) {
+        this.#context_metadata_constructor = context_metadata_constructor
+        this.#not_found_handler = not_found_handler || default_not_found_handler
+        this.#server_error_handler = server_error_handler || default_server_error_handler
     }
 
     /** Convience method to construct an HTTP 200 JSON encoded response */
+    // deno-lint-ignore no-explicit-any
     static jsonResponse(data: any): Response {
-        const response = new Response(JSON.stringify(data),{status:200})
+        const response = new Response(JSON.stringify(data), status200)
         response.headers.set("content-type", "text/json; charset=utf-8")
         return response
     }
@@ -258,7 +273,7 @@ export class Router<ContextMetadata = never> {
      * Process a Request, passed to Deno.serve() by the wrapped App
      */
     requestHandler = async (request: Request): Promise<Response> => {
-        const context: Context<ContextMetadata> = new Context(request)
+        const context: Context<ContextMetadata> = new Context<ContextMetadata>(request, this.#context_metadata_constructor(request))
         try {
             let nextRouteNode: RouteNode<ContextMetadata> | undefined
             if (request.method == "GET") {
@@ -387,7 +402,7 @@ export class Router<ContextMetadata = never> {
                 return (request: Request, _context: Context<ContextMetadata>) => {
                     const ifNoneMatch = request.headers.get("if-none-match")
                     if (ifNoneMatch && ifNoneMatch == etag) {
-                        const response = new Response(null,{status: 304})
+                        const response = new Response(null, status304)
                         response.headers.set("content-type", contentTypeHeader)
                         response.headers.set("etag", etag)
                         return response
