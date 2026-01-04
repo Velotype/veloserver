@@ -4,7 +4,7 @@ import { RequestInspectorResponse } from "@velotype/veloserver"
 import type {Context} from "@velotype/veloserver"
 
 Deno.test("GET", async () => {
-    const router: Router = new Router()
+    const router: Router<never> = new Router<never>({})
     router.get("/", function() {
         const response = new Response("Hello Veloserver!",{status:200})
         return response
@@ -17,7 +17,7 @@ Deno.test("GET", async () => {
 })
 
 Deno.test("request inspector", async () => {
-    const router: Router = new Router()
+    const router: Router<never> = new Router<never>({})
     router.get("/", function() {
         const response = new Response("Hello Veloserver!",{status:200})
         return response
@@ -34,7 +34,7 @@ Deno.test("request inspector", async () => {
 })
 
 Deno.test("request inspector on leaf path", async () => {
-    const router: Router = new Router()
+    const router: Router<never> = new Router<never>({})
     router.get("/sub/path", function() {
         const response = new Response("",{status:200})
         return response
@@ -52,7 +52,7 @@ Deno.test("request inspector on leaf path", async () => {
 })
 
 Deno.test("request inspector on sub path", async () => {
-    const router: Router = new Router()
+    const router: Router<never> = new Router<never>({})
     router.get("/sub/path", function() {
         const response = new Response("",{status:200})
         return response
@@ -70,7 +70,7 @@ Deno.test("request inspector on sub path", async () => {
 })
 
 Deno.test("request inspector on sub path, observeChildPaths false", async () => {
-    const router: Router = new Router()
+    const router: Router<never> = new Router<never>({})
     router.get(["/sub", "/sub/path"], function() {
         const response = new Response("",{status:200})
         return response
@@ -93,7 +93,7 @@ Deno.test("request inspector on sub path, observeChildPaths false", async () => 
 })
 
 Deno.test("global request inspector", async () => {
-    const router: Router = new Router()
+    const router: Router<never> = new Router<never>({})
     router.get("/sub/path", function() {
         const response = new Response("",{status:200})
         return response
@@ -111,7 +111,7 @@ Deno.test("global request inspector", async () => {
 })
 
 Deno.test("response inspector", async () => {
-    const router: Router = new Router()
+    const router: Router<never> = new Router<never>({})
     router.get("/", function() {
         const response = new Response("Hello Veloserver!",{status:200})
         return response
@@ -127,14 +127,14 @@ Deno.test("response inspector", async () => {
 })
 
 Deno.test("return 404 for unknown paths", async () => {
-    const router: Router = new Router()
+    const router: Router<never> = new Router<never>({})
     const req = new Request("http://localhost/unknown")
     const res = await router.requestHandler(req)
     assertEquals(res.status, 404)
 })
 
 Deno.test("POST", async () => {
-    const router: Router = new Router()
+    const router: Router<never> = new Router<never>({})
     router.post("/", async function(request: Request) {
         const response = new Response(await request.text() + " pong",{status:200})
         return response
@@ -150,7 +150,7 @@ Deno.test("POST", async () => {
 })
 
 Deno.test("return 404 for unknown http methods", async () => {
-    const router: Router = new Router()
+    const router: Router<never> = new Router<never>({})
     router.get("/", function() {
         const response = new Response("Hello Veloserver!",{status:200})
         return response
