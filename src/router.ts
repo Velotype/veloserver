@@ -179,7 +179,7 @@ export class Router<ContextMetadata> {
     #get_routes: RouteNode<ContextMetadata> = new RouteNode()
     #head_routes: RouteNode<ContextMetadata> = new RouteNode()
     #post_routes: RouteNode<ContextMetadata> = new RouteNode()
-    #context_metadata_constructor: (requet: Request) => ContextMetadata
+    #context_metadata_constructor?: (request: Request) => ContextMetadata
     #not_found_handler: Handler<ContextMetadata>
     #server_error_handler: Handler<ContextMetadata>
 
@@ -193,7 +193,7 @@ export class Router<ContextMetadata> {
     }: {
         not_found_handler?: Handler<ContextMetadata>,
         server_error_handler?: Handler<ContextMetadata>,
-        context_metadata_constructor: (request: Request) => ContextMetadata
+        context_metadata_constructor?: (request: Request) => ContextMetadata
     }) {
         this.#context_metadata_constructor = context_metadata_constructor
         this.#not_found_handler = not_found_handler || default_not_found_handler
@@ -202,10 +202,16 @@ export class Router<ContextMetadata> {
 
     /** Convience method to construct an HTTP 200 JSON encoded response */
     // deno-lint-ignore no-explicit-any
-    static jsonResponse(data: any): Response {
-        const response = new Response(JSON.stringify(data), status200)
-        response.headers.set("content-type", "text/json; charset=utf-8")
-        return response
+    jsonResponse(data: any): Response {
+        try {
+            const response = new Response(JSON.stringify(data), status200)
+            response.headers.set("content-type", "text/json; charset=utf-8")
+            return response
+        } catch (error) {
+            console.error("Failed to stringify response", error)
+            // TODO allow to be customized
+            return default_server_error_handler()
+        }
     }
 
     #processResponseInspectors = async (responseInspectors: ResponseInspector<ContextMetadata>[], request: Request, response: Response | Promise<Response>, context: Context<ContextMetadata>): Promise<Response> => {
@@ -273,7 +279,8 @@ export class Router<ContextMetadata> {
      * Process a Request, passed to Deno.serve() by the wrapped App
      */
     requestHandler = async (request: Request): Promise<Response> => {
-        const context: Context<ContextMetadata> = new Context<ContextMetadata>(request, this.#context_metadata_constructor(request))
+        const metadata: ContextMetadata = this.#context_metadata_constructor ? this.#context_metadata_constructor(request) : (undefined as ContextMetadata)
+        const context: Context<ContextMetadata> = new Context<ContextMetadata>(request, metadata)
         try {
             let nextRouteNode: RouteNode<ContextMetadata> | undefined
             if (request.method == "GET") {
