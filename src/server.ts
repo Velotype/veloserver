@@ -4,9 +4,9 @@ import type {Router} from "./router.ts"
 export type Callback = (()=>void) | (()=>Promise<void>)
 
 /**
- * The webserver application process
+ * A Server process
  */
-export class App<ContextMetadata = never> {
+export class Server<ContextMetadata = never> {
     #router: Router<ContextMetadata>
     #server_listen_callbacks: Callback[] = []
     #server_finished_callbacks: Callback[] = []
@@ -19,24 +19,24 @@ export class App<ContextMetadata = never> {
     }
 
     /** Add a callback to be called just after the server starts listening */
-    addServerListenCallback(callback: Callback) {
+    addServerListenCallback(callback: Callback): void {
         this.#server_listen_callbacks.push(callback)
     }
 
     /** Add a callback to be called just after the server has finished */
-    addServerFinishedCallback(callback: Callback) {
+    addServerFinishedCallback(callback: Callback): void {
         this.#server_finished_callbacks.push(callback)
     }
 
     /** Programmatically trigger the App to close */
-    close(reason?: string) {
+    close(reason?: string): void {
         console.log(`Close triggered due to: ${reason} - Starting shutdown`)
         this.#abortController?.abort(`Closing due to: ${reason}`)
         this.#abortController = undefined
     }
 
     /** Call Deno.serve() on the given hostname and port */
-    serve(hostname: string, port: number) {
+    serve(hostname: string, port: number): void {
         this.#abortController = new AbortController()
         const server = Deno.serve({
             port: port,

@@ -5,6 +5,7 @@ import {Context} from "./context.ts"
 
 const status200 = {status: 200}
 const status304 = {status: 304}
+const status400 = {status: 400}
 const status404 = {status: 404}
 const status500 = {status: 500}
 
@@ -162,6 +163,11 @@ const pathSegmentsFromPath = function(path: string) {
     return pathSegments
 }
 
+const default_bad_request_error_handler = function() {
+    const response = new Response("<!DOCTYPE html><html><body>Bad Request</body></html>", status400)
+    response.headers.set("content-type", "text/html; charset=utf-8")
+    return response
+}
 const default_not_found_handler = function() {
     const response = new Response("<!DOCTYPE html><html><body>Not Found</body></html>", status404)
     response.headers.set("content-type", "text/html; charset=utf-8")
@@ -180,6 +186,7 @@ export class Router<ContextMetadata> {
     #head_routes: RouteNode<ContextMetadata> = new RouteNode()
     #post_routes: RouteNode<ContextMetadata> = new RouteNode()
     #context_metadata_constructor?: (request: Request) => ContextMetadata
+    #bad_request_error_handler: Handler<ContextMetadata>
     #not_found_handler: Handler<ContextMetadata>
     #server_error_handler: Handler<ContextMetadata>
 
@@ -188,33 +195,43 @@ export class Router<ContextMetadata> {
      */
     constructor({
         not_found_handler,
+        bad_request_error_handler,
         server_error_handler,
         context_metadata_constructor
     }: {
         not_found_handler?: Handler<ContextMetadata>,
+        bad_request_error_handler?: Handler<ContextMetadata>,
         server_error_handler?: Handler<ContextMetadata>,
         context_metadata_constructor?: (request: Request) => ContextMetadata
     }) {
         this.#context_metadata_constructor = context_metadata_constructor
+        this.#bad_request_error_handler = bad_request_error_handler || default_bad_request_error_handler
         this.#not_found_handler = not_found_handler || default_not_found_handler
         this.#server_error_handler = server_error_handler || default_server_error_handler
     }
 
     /** Convience method to construct an HTTP 200 JSON encoded response */
     // deno-lint-ignore no-explicit-any
-    jsonResponse(data: any): Response {
+    json(request: Request, context: Context<ContextMetadata>, data: any): Response | Promise<Response> {
         try {
             const response = new Response(JSON.stringify(data), status200)
             response.headers.set("content-type", "text/json; charset=utf-8")
             return response
         } catch (error) {
             console.error("Failed to stringify response", error)
-            // TODO allow to be customized
-            return default_server_error_handler()
+            return this.#server_error_handler(request, context)
         }
     }
+    /** Convience method to construct an HTTP 400 Bad Request response */
+    badRequest(request: Request, context: Context<ContextMetadata>): Response | Promise<Response> {
+        return this.#bad_request_error_handler(request, context)
+    }
+    /** Convience method to construct an HTTP 500 Server Error response */
+    serverError(request: Request, context: Context<ContextMetadata>): Response | Promise<Response> {
+        return this.#server_error_handler(request, context)
+    }
 
-    #processResponseInspectors = async (responseInspectors: ResponseInspector<ContextMetadata>[], request: Request, response: Response | Promise<Response>, context: Context<ContextMetadata>): Promise<Response> => {
+    async #processResponseInspectors(responseInspectors: ResponseInspector<ContextMetadata>[], request: Request, response: Response | Promise<Response>, context: Context<ContextMetadata>): Promise<Response> {
         const responseObj: Response = (response instanceof Promise) ? await response : response
         for(const responseInspector of responseInspectors) {
             const responseInspectorResponse = responseInspector(request, responseObj, context)
@@ -225,7 +242,7 @@ export class Router<ContextMetadata> {
         return response
     }
 
-    #addPathHandlerToNode(routeNode: RouteNode<ContextMetadata>, paths: string | string[], handler: Handler<ContextMetadata>) {
+    #addPathHandlerToNode(routeNode: RouteNode<ContextMetadata>, paths: string | string[], handler: Handler<ContextMetadata>): void {
         if (Array.isArray(paths)) {
             paths.forEach(path => {
                 routeNode.addPathHandler(pathSegmentsFromPath(path), handler)
@@ -234,7 +251,7 @@ export class Router<ContextMetadata> {
             routeNode.addPathHandler(pathSegmentsFromPath(paths), handler)
         }
     }
-    #addPathInspectorToNode(routeNode: RouteNode<ContextMetadata>, paths: string | string[], inspector: Inspector<ContextMetadata>) {
+    #addPathInspectorToNode(routeNode: RouteNode<ContextMetadata>, paths: string | string[], inspector: Inspector<ContextMetadata>): void {
         if (Array.isArray(paths)) {
             paths.forEach(path => {
                 routeNode.addPathInspector(pathSegmentsFromPath(path), inspector)
@@ -278,7 +295,7 @@ export class Router<ContextMetadata> {
     /**
      * Process a Request, passed to Deno.serve() by the wrapped App
      */
-    requestHandler = async (request: Request): Promise<Response> => {
+    async requestHandler(request: Request): Promise<Response> {
         const metadata: ContextMetadata = this.#context_metadata_constructor ? this.#context_metadata_constructor(request) : (undefined as ContextMetadata)
         const context: Context<ContextMetadata> = new Context<ContextMetadata>(request, metadata)
         try {
