@@ -32,7 +32,7 @@ export class Context<ContextMetadata = undefined> {
     }
     /** Capture a path variable in the context */
     addPathVariable(pathVariableName: string, pathVariableValue: string): void {
-        if (!this.pathVariables) {
+        if (this.pathVariables === undefined) {
             this.pathVariables = new Map<string,string>()
         }
         this.pathVariables.set(pathVariableName, pathVariableValue)

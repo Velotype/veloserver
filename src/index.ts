@@ -4,8 +4,8 @@ import {
     Inspector,
     Router
 } from "./router.ts"
-import {App} from "./app.ts"
-import type {Callback} from "./app.ts"
+import {Server} from "./server.ts"
+import type {Callback} from "./server.ts"
 import type {
     Handler,
     RequestInspector,
@@ -13,7 +13,7 @@ import type {
 } from "./router.ts"
 
 export {
-    App,
+    Server,
     Context,
     RequestInspectorResponse,
     Inspector,
