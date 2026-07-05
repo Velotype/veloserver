@@ -5,6 +5,7 @@
 export class Context<ContextMetadata = undefined> {
     /** The original URL of the Request */
     url: URL
+
     /** Captured path variables (if any) */
     pathVariables?: Map<string,string>
 
