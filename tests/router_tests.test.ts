@@ -25,7 +25,7 @@ Deno.test("request inspector", async () => {
     let inspectorTriggered = false
     router.addGetInspector("/",new Inspector((_request: Request, _context: Context) => {
         inspectorTriggered = true
-        return new RequestInspectorResponse(true)
+        return new RequestInspectorResponse()
     }))
 
     const req = new Request("http://localhost/")
@@ -42,7 +42,7 @@ Deno.test("request inspector on leaf path", async () => {
     let inspectorTriggered = false
     router.addGetInspector("/sub/path",new Inspector((_request: Request, _context: Context) => {
         inspectorTriggered = true
-        return new RequestInspectorResponse(true)
+        return new RequestInspectorResponse()
     }))
 
     const req = new Request("http://localhost/sub/path")
@@ -60,7 +60,7 @@ Deno.test("request inspector on sub path", async () => {
     let inspectorTriggered = false
     router.addGetInspector("/sub",new Inspector((_request: Request, _context: Context) => {
         inspectorTriggered = true
-        return new RequestInspectorResponse(true)
+        return new RequestInspectorResponse()
     }))
 
     const req = new Request("http://localhost/sub/path")
@@ -78,7 +78,7 @@ Deno.test("request inspector on sub path, observeChildPaths false", async () => 
     let inspectorTriggered = false
     router.addGetInspector("/sub",new Inspector((_request: Request, _context: Context) => {
         inspectorTriggered = true
-        return new RequestInspectorResponse(true)
+        return new RequestInspectorResponse()
     }, undefined, false))
 
     let req = new Request("http://localhost/sub/path")
@@ -101,7 +101,7 @@ Deno.test("global request inspector", async () => {
     let inspectorTriggered = false
     router.addGetInspector("",new Inspector((_request: Request, _context: Context) => {
         inspectorTriggered = true
-        return new RequestInspectorResponse(true)
+        return new RequestInspectorResponse()
     }))
 
     const req = new Request("http://localhost/sub/path")
@@ -184,7 +184,7 @@ Deno.test("custom context", async () => {
     router.addGetInspector("/",new Inspector((_request: Request, context: Context<CustomContext>) => {
         context.meta.uid = "123"
         inspectorTriggered = true
-        return new RequestInspectorResponse(true)
+        return new RequestInspectorResponse()
     }))
 
     const req = new Request("http://localhost/")

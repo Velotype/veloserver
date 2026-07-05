@@ -19,12 +19,9 @@ const status500 = {status: 500}
  */
 export class RequestInspectorResponse {
     /** The Response to use if the call chain should be halted */
-    response?: Response = undefined
-    /** A boolean to explicitly flag if the call chain should continue */
-    shouldContinue: boolean
+    response?: Response
     /** Create a new RequestInspectorResponse */
-    constructor(shouldContinue: boolean, response?: Response) {
-        this.shouldContinue = shouldContinue
+    constructor(response?: Response) {
         this.response = response
     }
 }
@@ -50,7 +47,7 @@ export class Inspector<ContextMetadata = never> {
     constructor(requestInspector?: RequestInspector<ContextMetadata> | undefined, responseInspector?: ResponseInspector<ContextMetadata>, observeChildPaths?: boolean) {
         this.requestInspector = requestInspector
         this.responseInspector = responseInspector
-        this.observeChildPaths = (observeChildPaths != undefined) ? observeChildPaths : true
+        this.observeChildPaths = (observeChildPaths !== undefined) ? observeChildPaths : true
     }
 }
 
@@ -324,11 +321,8 @@ export class Router<ContextMetadata> {
                         if (requestInspectorResponse instanceof Promise) {
                             requestInspectorResponse = await requestInspectorResponse
                         }
-                        if (requestInspectorResponse.response) {
+                        if (requestInspectorResponse.response !== undefined) {
                             return this.#processResponseInspectors(responseInspectors, request, requestInspectorResponse.response, context)
-                        } else if (!requestInspectorResponse.shouldContinue) {
-                            console.log(`ERROR Middleware did not provide a response yet shouldContinue was false request pathname: ${context.url.pathname}`)
-                            return this.#processResponseInspectors(responseInspectors, request, this.#server_error_handler(request,context), context)
                         }
                     }
                     if (inspector.responseInspector && (pathParts.length == 0 || inspector.observeChildPaths)) {
@@ -363,6 +357,24 @@ export class Router<ContextMetadata> {
         } catch (error) {
             console.log("ERROR", error)
             return this.#server_error_handler(request, context)
+        }
+    }
+
+   /**
+     * Mount a single file to a given path (mounts the file on HTTP GET)
+     * 
+     * This will preload the file into memory and serve from memory on each request
+     * 
+     * @param memoized - if the file should be read only once and held in-memory (true by default)
+     */
+    async mountFile(mountPath: string, targetFile: string, memoized: boolean = true): Promise<void> {
+        console.log(`Mounting memoized target file: ${targetFile} to path: ${mountPath}`)
+        if (memoized) {
+            console.log(`Serving file directly: ${targetFile}`)
+            this.get(mountPath, this.#serveFile(targetFile))
+        } else {
+            console.log(`Serving file memoized: ${targetFile}`)
+            this.get(mountPath, await this.#serveMemoizedFile(targetFile))
         }
     }
 
