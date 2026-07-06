@@ -291,8 +291,10 @@ export class Router<ContextMetadata> {
 
     /**
      * Process a Request, passed to Deno.serve() by the wrapped App
+     *
+     * Note: This function is specifically bound to (this)
      */
-    async requestHandler(request: Request): Promise<Response> {
+    requestHandler = async (request: Request): Promise<Response> => {
         const metadata: ContextMetadata = this.#context_metadata_constructor ? this.#context_metadata_constructor(request) : (undefined as ContextMetadata)
         const context: Context<ContextMetadata> = new Context<ContextMetadata>(request, metadata)
         try {
