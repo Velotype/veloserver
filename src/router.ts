@@ -370,11 +370,11 @@ export class Router<ContextMetadata> {
     async mountFile(mountPath: string, targetFile: string, memoized: boolean = true): Promise<void> {
         console.log(`Mounting memoized target file: ${targetFile} to path: ${mountPath}`)
         if (memoized) {
-            console.log(`Serving file directly: ${targetFile}`)
-            this.get(mountPath, this.#serveFile(targetFile))
-        } else {
             console.log(`Serving file memoized: ${targetFile}`)
             this.get(mountPath, await this.#serveMemoizedFile(targetFile))
+        } else {
+            console.log(`Serving file directly: ${targetFile}`)
+            this.get(mountPath, this.#serveFile(targetFile))
         }
     }
 
@@ -390,11 +390,11 @@ export class Router<ContextMetadata> {
         for (const dirEntry of Deno.readDirSync(targetDir)) {
             if (dirEntry.isFile) {
                 if (memoized) {
-                    console.log(`Serving file directly: ${targetDir + dirEntry.name}`)
-                    this.get(mountDir + dirEntry.name, this.#serveFile(targetDir + dirEntry.name))
-                } else {
                     console.log(`Serving file memoized: ${targetDir + dirEntry.name}`)
                     this.get(mountDir + dirEntry.name, await this.#serveMemoizedFile(targetDir + dirEntry.name))
+                } else {
+                    console.log(`Serving file directly: ${targetDir + dirEntry.name}`)
+                    this.get(mountDir + dirEntry.name, this.#serveFile(targetDir + dirEntry.name))
                 }
             } else if (dirEntry.isDirectory) {
                 this.mountFiles(mountDir + dirEntry.name + "/", targetDir + dirEntry.name + "/", memoized)
