@@ -56,7 +56,12 @@ class RouteNode<ContextMetadata> {
     isWildcard: boolean = false
     pathVariable: string = ""
     inspectors: Inspector<ContextMetadata>[] = []
-    childNodes: RouteNode<ContextMetadata>[] = []
+    /** Static (non-wildcard) children, keyed by exact path segment for O(1) lookup */
+    staticChildren: Map<string, RouteNode<ContextMetadata>> = new Map()
+    /** Wildcard children (":param" or "*" segments) - always small (0-1 in well-formed
+     * route trees), so a plain array is fine; kept separate from staticChildren so
+     * matching a static segment never has to scan past them */
+    wildcardChildren: RouteNode<ContextMetadata>[] = []
     handler: Handler<ContextMetadata> | undefined = undefined
     setPathSegment(pathSegment: string): void {
         this.pathSegment = pathSegment
@@ -77,8 +82,15 @@ class RouteNode<ContextMetadata> {
             this.handler = handler
         }
     }
+    childCount(): number {
+        return this.staticChildren.size + this.wildcardChildren.length
+    }
     addChildNode(routeNode: RouteNode<ContextMetadata>): void {
-        this.childNodes.push(routeNode)
+        if (routeNode.isWildcard) {
+            this.wildcardChildren.push(routeNode)
+        } else {
+            this.staticChildren.set(routeNode.pathSegment, routeNode)
+        }
     }
     addPathHandler(pathSegments: string[], handler: Handler<ContextMetadata>): void {
         this.addPathPropertyHelper(pathSegments, (node: RouteNode<ContextMetadata>) => {
@@ -108,10 +120,10 @@ class RouteNode<ContextMetadata> {
             }
         } else if (pathSegment.length > 1 && pathSegment.charAt(0) == ":") {
             const pathVariable = pathSegment.substring(1)
-            if (this.childNodes.length > 1) {
-                console.log(`ERROR Route validation error, RouteNode with pathVariable child has more than one child, childNodes.length: ${this.childNodes.length} pathSegment: ${this.pathSegment}`)
+            if (this.childCount() > 1) {
+                console.log(`ERROR Route validation error, RouteNode with pathVariable child has more than one child, childNodes.length: ${this.childCount()} pathSegment: ${this.pathSegment}`)
             }
-            const child = this.childNodes.find(node => node.isWildcard)
+            const child = this.wildcardChildren[0]
             if (child) {
                 if (child.pathVariable != pathVariable) {
                     console.log(`ERROR Route validation error, path variable segments require global consistency current route pathVariable is: ${child.pathVariable} while trying to register: ${pathVariable}`)
@@ -132,7 +144,7 @@ class RouteNode<ContextMetadata> {
                 this.addChildNode(newChild)
             }
         } else {
-            const child = this.childNodes.find(node => node.pathSegment == pathSegment)
+            const child = this.staticChildren.get(pathSegment)
             if (child) {
                 if (pathSegments.length == 0) {
                     setClosure(child)
@@ -309,53 +321,58 @@ export class Router<ContextMetadata> {
             if (!nextRouteNode) {
                 // Unsupported method
                 console.log(`WARN Called with unsupported method: ${request.method}`)
-                return this.#not_found_handler(request,context)
+                return await this.#not_found_handler(request,context)
             }
+            // context.getPathParts() is cached and shared - never mutate it (e.g. via
+            // .shift()) here. A leading "/" always produces an empty first element, so
+            // matching starts at index 1.
             const pathParts = context.getPathParts()
-            pathParts.shift()
+            let partIndex = 1
             const responseInspectors: ResponseInspector<ContextMetadata>[] = []
             let closestWildcard = undefined
             while(nextRouteNode) {
+                const atLeaf = partIndex >= pathParts.length
                 // Process inspectors for this node
                 for(const inspector of nextRouteNode.inspectors) {
-                    if (inspector.requestInspector && (pathParts.length == 0 || inspector.observeChildPaths)) {
+                    if (inspector.requestInspector && (atLeaf || inspector.observeChildPaths)) {
                         let requestInspectorResponse = inspector.requestInspector(request, context)
                         if (requestInspectorResponse instanceof Promise) {
                             requestInspectorResponse = await requestInspectorResponse
                         }
                         if (requestInspectorResponse.response !== undefined) {
-                            return this.#processResponseInspectors(responseInspectors, request, requestInspectorResponse.response, context)
+                            return await this.#processResponseInspectors(responseInspectors, request, requestInspectorResponse.response, context)
                         }
                     }
-                    if (inspector.responseInspector && (pathParts.length == 0 || inspector.observeChildPaths)) {
+                    if (inspector.responseInspector && (atLeaf || inspector.observeChildPaths)) {
                         responseInspectors.push(inspector.responseInspector)
                     }
                 }
                 // No more parts, so time to process the route's handler
-                if (pathParts.length == 0) {
+                if (atLeaf) {
                     if (nextRouteNode.handler) {
-                        return this.#processResponseInspectors(responseInspectors, request, nextRouteNode.handler(request,context), context)
+                        return await this.#processResponseInspectors(responseInspectors, request, nextRouteNode.handler(request,context), context)
                     }
-                    return this.#processResponseInspectors(responseInspectors, request, this.#not_found_handler(request,context), context)
+                    return await this.#processResponseInspectors(responseInspectors, request, this.#not_found_handler(request,context), context)
                 }
-                const pathSegment = pathParts[0]
-                pathParts.shift()
+                const pathSegment = pathParts[partIndex]
+                partIndex++
 
                 // If there is a splat wildcard child, capture for later
-                const wildcardSplitChild = nextRouteNode.childNodes.find(routeNode => (routeNode.isWildcard && routeNode.pathVariable == "*"))
+                const wildcardSplitChild = nextRouteNode.wildcardChildren.find(routeNode => routeNode.pathVariable == "*")
                 if (wildcardSplitChild && wildcardSplitChild.handler) {
                     closestWildcard = wildcardSplitChild
                 }
 
-                nextRouteNode = nextRouteNode.childNodes.find(routeNode => (routeNode.isWildcard || routeNode.pathSegment == pathSegment))
+                // Static match takes priority over a param/wildcard sibling at the same node
+                nextRouteNode = nextRouteNode.staticChildren.get(pathSegment) ?? nextRouteNode.wildcardChildren[0]
                 if (nextRouteNode && nextRouteNode.isWildcard && nextRouteNode.pathVariable != "*") {
                     context.addPathVariable(nextRouteNode.pathVariable, pathSegment)
                 }
             }
             if (closestWildcard && closestWildcard.handler) {
-                return this.#processResponseInspectors(responseInspectors, request, closestWildcard.handler(request,context), context)
+                return await this.#processResponseInspectors(responseInspectors, request, closestWildcard.handler(request,context), context)
             }
-            return this.#processResponseInspectors(responseInspectors, request, this.#not_found_handler(request,context), context)
+            return await this.#processResponseInspectors(responseInspectors, request, this.#not_found_handler(request,context), context)
         } catch (error) {
             console.log("ERROR", error)
             return this.#server_error_handler(request, context)
