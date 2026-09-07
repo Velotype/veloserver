@@ -165,6 +165,32 @@ class RouteNode<ContextMetadata> {
     }
 }
 
+/** gzip-compress a buffer using the standard Web Streams CompressionStream (no extra dependency) */
+async function gzipCompress(data: Uint8Array<ArrayBuffer>): Promise<Uint8Array<ArrayBuffer>> {
+    const compressionStream = new CompressionStream("gzip")
+    const writer = compressionStream.writable.getWriter()
+    writer.write(data)
+    writer.close()
+    const chunks: Uint8Array[] = []
+    let totalLength = 0
+    const reader = compressionStream.readable.getReader()
+    for (;;) {
+        const {done, value} = await reader.read()
+        if (done) break
+        if (value) {
+            chunks.push(value)
+            totalLength += value.byteLength
+        }
+    }
+    const result: Uint8Array<ArrayBuffer> = new Uint8Array(totalLength)
+    let offset = 0
+    for (const chunk of chunks) {
+        result.set(chunk, offset)
+        offset += chunk.byteLength
+    }
+    return result
+}
+
 const readTrue = {read: true}
 const pathSegmentsFromPath = function(path: string) {
     const pathSegments: string[] = path.split("/")
@@ -406,21 +432,28 @@ export class Router<ContextMetadata> {
      */
     async mountFiles(mountDir: string, targetDir: string, memoized: boolean = true): Promise<void> {
         console.log(`Mounting memoized target dir: ${targetDir} to mount: ${mountDir}`)
+        // Load files and recurse into subdirectories concurrently, and actually wait for
+        // all of it (the recursive call used to be fired without awaiting it, so this
+        // method could resolve before nested directories had finished mounting).
+        const tasks: Promise<void>[] = []
         for (const dirEntry of Deno.readDirSync(targetDir)) {
             if (dirEntry.isFile) {
                 if (memoized) {
-                    console.log(`Serving file memoized: ${targetDir + dirEntry.name}`)
-                    this.get(mountDir + dirEntry.name, await this.#serveMemoizedFile(targetDir + dirEntry.name))
+                    tasks.push((async () => {
+                        console.log(`Serving file memoized: ${targetDir + dirEntry.name}`)
+                        this.get(mountDir + dirEntry.name, await this.#serveMemoizedFile(targetDir + dirEntry.name))
+                    })())
                 } else {
                     console.log(`Serving file directly: ${targetDir + dirEntry.name}`)
                     this.get(mountDir + dirEntry.name, this.#serveFile(targetDir + dirEntry.name))
                 }
             } else if (dirEntry.isDirectory) {
-                this.mountFiles(mountDir + dirEntry.name + "/", targetDir + dirEntry.name + "/", memoized)
+                tasks.push(this.mountFiles(mountDir + dirEntry.name + "/", targetDir + dirEntry.name + "/", memoized))
             } else if (dirEntry.isSymlink) {
                 console.log(`ERROR Attempted to mount a symlink, this is not supported name: ${dirEntry.name}`)
             }
         }
+        await Promise.all(tasks)
     }
 
     #serveFile(path: string): Handler<ContextMetadata> {
@@ -439,9 +472,6 @@ export class Router<ContextMetadata> {
         }
     }
 
-    //TODO compress early as part of memoization
-    // https://docs.deno.com/runtime/fundamentals/http_server/#automatic-body-compression
-    // https://github.com/oakserver/oak/blob/main/send.ts#L167
     //TODO support Cache-Control
     async #serveMemoizedFile(path: string) {
         const fileInfo = Deno.statSync(path)
@@ -452,19 +482,32 @@ export class Router<ContextMetadata> {
             const buf = new Uint8Array(fileInfo.size)
             const numberOfBytesRead = file.readSync(buf)
             const etag = await eTag(buf)
-            console.log(`Loaded memoized file path: ${path} bytes: ${numberOfBytesRead} etag: ${etag}`)
+            // Precompute a gzip variant once at mount time rather than per-request. Skipped
+            // at serve time if it didn't actually shrink the file (already-compressed
+            // formats like images, video, or woff2 fonts usually don't benefit).
+            const gzipBuf = await gzipCompress(buf)
+            const useGzip = gzipBuf.byteLength < buf.byteLength
+            console.log(`Loaded memoized file path: ${path} bytes: ${numberOfBytesRead} etag: ${etag}${useGzip ? ` gzip bytes: ${gzipBuf.byteLength}` : ""}`)
             if (numberOfBytesRead == fileInfo.size) {
                 return (request: Request, _context: Context<ContextMetadata>) => {
+                    const acceptEncoding = request.headers.get("accept-encoding") || ""
+                    const sendGzip = useGzip && acceptEncoding.includes("gzip")
+                    const responseEtag = sendGzip ? `${etag}-gzip` : etag
                     const ifNoneMatch = request.headers.get("if-none-match")
-                    if (ifNoneMatch && ifNoneMatch == etag) {
+                    if (ifNoneMatch && ifNoneMatch == responseEtag) {
                         const response = new Response(null, status304)
                         response.headers.set("content-type", contentTypeHeader)
-                        response.headers.set("etag", etag)
+                        response.headers.set("etag", responseEtag)
+                        response.headers.set("vary", "accept-encoding")
                         return response
                     } else {
-                        const response = new Response(buf)
+                        const response = new Response(sendGzip ? gzipBuf : buf)
                         response.headers.set("content-type", contentTypeHeader)
-                        response.headers.set("etag", etag)
+                        response.headers.set("etag", responseEtag)
+                        response.headers.set("vary", "accept-encoding")
+                        if (sendGzip) {
+                            response.headers.set("content-encoding", "gzip")
+                        }
                         return response
                     }
                 }
