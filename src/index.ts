@@ -5,7 +5,7 @@ import {
     Router
 } from "./router.ts"
 import {Server} from "./server.ts"
-import type {Callback} from "./server.ts"
+import type {Callback, ServeOptions} from "./server.ts"
 import type {
     Handler,
     RequestInspector,
@@ -22,6 +22,7 @@ export {
 
 export type {
     Callback,
+    ServeOptions,
     Handler,
     RequestInspector,
     ResponseInspector

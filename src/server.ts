@@ -3,6 +3,18 @@ import type {Router} from "./router.ts"
 /** Used to represent a generic Callback function */
 export type Callback = (()=>void) | (()=>Promise<void>)
 
+/** Options for {@link Server.serve} */
+export type ServeOptions = {
+    /**
+     * Call `Deno.exit(0)` once the server has finished shutting down (default: `false`)
+     *
+     * Leave unset when the server is one part of a longer-lived process - a test suite, a build
+     * step - which should carry on after it stops. Set `true` to end the process the moment the
+     * server does, even with other work still pending.
+     */
+    exitProcessOnClose?: boolean
+}
+
 /**
  * A Server process
  */
@@ -36,7 +48,7 @@ export class Server<ContextMetadata = never> {
     }
 
     /** Call Deno.serve() on the given hostname and port */
-    serve(hostname: string, port: number): void {
+    serve(hostname: string, port: number, options?: ServeOptions): void {
         this.#abortController = new AbortController()
         const server = Deno.serve({
             port: port,
@@ -64,15 +76,24 @@ export class Server<ContextMetadata = never> {
                 }
             }
             console.log("Server closed")
-            Deno.exit(0)
+            // A registered signal listener holds the event loop open, so the process cannot end
+            // on its own until these are gone
+            for (const [signal, handler] of signalHandlers) {
+                Deno.removeSignalListener(signal, handler)
+            }
+            if (options?.exitProcessOnClose ?? false) {
+                Deno.exit(0)
+            }
         })
         const signals: Deno.Signal[] = ["SIGINT", "SIGTERM", "SIGUSR1"]
-        signals.forEach(signal => {
-            Deno.addSignalListener(signal, () => {
+        const signalHandlers: [Deno.Signal, () => void][] = signals.map(signal => {
+            const handler = () => {
                 console.log(`Received ${signal} signal - Starting shutdown`)
                 this.#abortController?.abort(`Received ${signal}`)
                 this.#abortController = undefined
-            })
+            }
+            Deno.addSignalListener(signal, handler)
+            return [signal, handler]
         })
     }
 }

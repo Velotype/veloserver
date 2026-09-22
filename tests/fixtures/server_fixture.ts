@@ -1,9 +1,6 @@
-// Standalone fixture run as a subprocess by tests/server_tests.test.ts.
-//
-// Server.serve() calls Deno.exit(0) once it finishes shutting down, which would
-// kill the whole `deno test` process if Server were exercised in-process - so this
-// fixture is spawned as its own Deno process instead, and proves callbacks actually
-// ran by writing markers to a file (passed in via env) rather than parsing stdout.
+// Standalone fixture run as a subprocess by tests/server_tests.test.ts, so that the signal and
+// shutdown paths are exercised against a real process. Proves callbacks ran by writing markers to a
+// file (passed in via env) rather than parsing stdout.
 import { Server, Router } from "@velotype/veloserver"
 
 const port = Number(Deno.env.get("TEST_PORT"))
@@ -31,4 +28,11 @@ server.addServerListenCallback(() => mark("listen-callback-2"))
 server.addServerFinishedCallback(() => mark("finished-callback-1"))
 server.addServerFinishedCallback(() => mark("finished-callback-2"))
 
-server.serve("127.0.0.1", port)
+// Fires only if the process outlives its own shutdown, so it distinguishes the two modes. A timer
+// rather than an `unload` listener, which may or may not run on Deno.exit().
+server.addServerFinishedCallback(() => {
+    setTimeout(() => mark("caller-resumed"), 50)
+})
+
+const exitOnClose = Deno.env.get("TEST_EXIT_ON_CLOSE") === "true"
+server.serve("127.0.0.1", port, exitOnClose ? {exitProcessOnClose: true} : undefined)
