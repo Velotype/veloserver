@@ -3,7 +3,8 @@
   "license": "MIT",
   "version": "0.2.0",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./dev": "./src/dev/dev.ts"
   },
   "publish": {
     "exclude": [
