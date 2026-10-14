@@ -4,6 +4,10 @@ Changes in each version of `@velotype/veloserver` published to [JSR](https://jsr
 
 **Breaking** marks a change that can require updates to code that uses veloserver.
 
+## Unreleased
+
+- `Server.serve()` no longer asks the OS for the host name, so running a server needs no permission beyond the network. Previously, without `--allow-sys` the server crashed right after binding its port (the start message called `Deno.hostname()`). The start message is now `Server started at http://HOST:PORT with deno version X`, without the trailing `on host: ...`; anything that read the host name from that line will no longer find it.
+
 ## 0.3.0 — 2026-10-04
 
 - New `@velotype/veloserver/dev` entry point with `DevServer`, a development server for Velotype apps that updates the page when its files change. Its `mode` is `module` (serves each module unbundled and re-runs only the changed modules), `bundle` (rebuilds and re-runs the app bundle), `reload` (rebuilds the bundle and reloads the page), or `off` (writes the production scripts). In `module` and `bundle` mode, components on the page are updated in place and keep their state, using the Velotype dev runtime. `pageScripts()` writes the page's scripts for the current mode.

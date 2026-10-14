@@ -18,7 +18,7 @@
       "@std/http/etag": "jsr:@std/http@^1.1.3/etag"
   },
   "tasks": {
-    "test": "deno test --allow-read --allow-write --allow-net --allow-run --allow-sys ./tests/"
+    "test": "deno test --allow-read --allow-write --allow-net --allow-run ./tests/"
   },
   "compilerOptions": {
     "lib": ["dom", "deno.ns", "esnext"]

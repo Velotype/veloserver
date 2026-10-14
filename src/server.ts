@@ -56,7 +56,7 @@ export class Server<ContextMetadata = never> {
             handler: this.#router.requestHandler,
             signal: this.#abortController.signal,
             onListen: async ({ port, hostname }) => {
-                console.log(`Server started at http://${hostname}:${port} on host: ${Deno.hostname()} with deno version: ${Deno.version.deno}`)
+                console.log(`Server started at http://${hostname}:${port} with deno version: ${Deno.version.deno}`)
                 for (const callback of this.#server_listen_callbacks) {
                     try {
                         await callback()

@@ -24,7 +24,7 @@ function spawnFixture(port: number, markerFile: string, exitOnClose?: boolean) {
         env["TEST_EXIT_ON_CLOSE"] = String(exitOnClose)
     }
     return new Deno.Command(Deno.execPath(), {
-        args: ["run", "--allow-net", "--allow-env", "--allow-write", "--allow-sys", FIXTURE_PATH.pathname],
+        args: ["run", "--allow-net", "--allow-env", "--allow-write", FIXTURE_PATH.pathname],
         env,
         stdout: "null",
         stderr: "piped",

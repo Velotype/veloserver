@@ -17,7 +17,7 @@ const server = new Server(router)
 server.serve("127.0.0.1", 3000)
 ```
 
-Run it with `deno run --allow-net server.ts`.
+Run it with `deno run --allow-net server.ts`. The server needs no other permission to serve.
 
 ## Routes
 
