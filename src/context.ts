@@ -75,4 +75,20 @@ export class Context<ContextMetadata = undefined> {
         }
         this.pathVariables.set(pathVariableName, pathVariableValue)
     }
+    /** Forget the path variables captured after the first `count`, when the route that captured them didn't match */
+    keepFirstPathVariables(count: number): void {
+        if (this.pathVariables === undefined || this.pathVariables.size <= count) {
+            return
+        }
+        if (count === 0) {
+            this.pathVariables = undefined
+            return
+        }
+        let index = 0
+        for (const name of this.pathVariables.keys()) {
+            if (index++ >= count) {
+                this.pathVariables.delete(name)
+            }
+        }
+    }
 }

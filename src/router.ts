@@ -356,6 +356,7 @@ export class Router<ContextMetadata> {
             let partIndex = 1
             const responseInspectors: ResponseInspector<ContextMetadata>[] = []
             let closestWildcard = undefined
+            let closestWildcardVariables = 0
             while(nextRouteNode) {
                 const atLeaf = partIndex >= pathParts.length
                 // Process inspectors for this node
@@ -378,7 +379,8 @@ export class Router<ContextMetadata> {
                     if (nextRouteNode.handler) {
                         return await this.#processResponseInspectors(responseInspectors, request, nextRouteNode.handler(request,context), context)
                     }
-                    return await this.#processResponseInspectors(responseInspectors, request, this.#not_found_handler(request,context), context)
+                    // Stopped partway along a longer route, so it's a miss like any other: a splat above still answers
+                    break
                 }
                 const pathSegment = pathParts[partIndex]
                 partIndex++
@@ -387,6 +389,7 @@ export class Router<ContextMetadata> {
                 const wildcardSplitChild = nextRouteNode.wildcardChildren.find(routeNode => routeNode.pathVariable == "*")
                 if (wildcardSplitChild && wildcardSplitChild.handler) {
                     closestWildcard = wildcardSplitChild
+                    closestWildcardVariables = context.pathVariables?.size ?? 0
                 }
 
                 // Static match takes priority over a param/wildcard sibling at the same node
@@ -395,9 +398,12 @@ export class Router<ContextMetadata> {
                     context.addPathVariable(nextRouteNode.pathVariable, pathSegment)
                 }
             }
+            // Variables captured on the way down belong to routes that turned out not to match
             if (closestWildcard && closestWildcard.handler) {
+                context.keepFirstPathVariables(closestWildcardVariables)
                 return await this.#processResponseInspectors(responseInspectors, request, closestWildcard.handler(request,context), context)
             }
+            context.keepFirstPathVariables(0)
             return await this.#processResponseInspectors(responseInspectors, request, this.#not_found_handler(request,context), context)
         } catch (error) {
             console.log("ERROR", error)
