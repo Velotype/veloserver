@@ -149,3 +149,31 @@ Deno.test("a splat fallback keeps the variables before it and drops the ones aft
     assertEquals((await router.requestHandler(new Request("http://localhost/files/me/docs/report/other"))).status, 200)
     assertEquals(seen, new Map([["owner", "me"]]))
 })
+
+Deno.test("a splat answers a path that stops partway along a deeper sibling route", async () => {
+    let seen: Map<string, string> | undefined = undefined
+    const router: Router<never> = new Router<never>({})
+    router.get("/files/*", () => new Response("splat", { status: 200 }))
+    router.get("/files/a/b", () => new Response("deep", { status: 200 }))
+    router.get("/docs/:owner/*", (_request: Request, context: Context<never>) => {
+        seen = context.pathVariables
+        return new Response("docs splat", { status: 200 })
+    })
+    router.get("/docs/:owner/shared/:name/edit", () => new Response("edit", { status: 200 }))
+
+    const stopped = await router.requestHandler(new Request("http://localhost/files/a"))
+    assertEquals(stopped.status, 200)
+    assertEquals(await stopped.text(), "splat")
+
+    const full = await router.requestHandler(new Request("http://localhost/files/a/b"))
+    assertEquals(await full.text(), "deep")
+
+    // Variables captured after the splat are dropped here too
+    const partway = await router.requestHandler(new Request("http://localhost/docs/me/shared/report"))
+    assertEquals(await partway.text(), "docs splat")
+    assertEquals(seen, new Map([["owner", "me"]]))
+
+    // With no splat above, it's still not found
+    const none = await router.requestHandler(new Request("http://localhost/docs"))
+    assertEquals(none.status, 404)
+})

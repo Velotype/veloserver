@@ -379,8 +379,8 @@ export class Router<ContextMetadata> {
                     if (nextRouteNode.handler) {
                         return await this.#processResponseInspectors(responseInspectors, request, nextRouteNode.handler(request,context), context)
                     }
-                    context.keepFirstPathVariables(0)
-                    return await this.#processResponseInspectors(responseInspectors, request, this.#not_found_handler(request,context), context)
+                    // Stopped partway along a longer route, so it's a miss like any other: a splat above still answers
+                    break
                 }
                 const pathSegment = pathParts[partIndex]
                 partIndex++
